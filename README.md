@@ -64,8 +64,9 @@ Reproduce with `python evaluate.py`.
 - **Model insights** — per-model anomaly distributions and the most anomalous accounts
 - **Evaluation** — precision/recall, confusion matrix, ROC curve vs ground truth
 
-Upload your own ledger (CSV) or generate synthetic data with adjustable size, time span,
-and suspicious-rate; tune the rule/ML/graph weights live.
+Upload your own ledger (**CSV or Excel** — required columns `timestamp, src, dst, amount`)
+or generate synthetic data with adjustable size, time span, and suspicious-rate; tune the
+rule/ML/graph weights live.
 
 ## Run locally
 

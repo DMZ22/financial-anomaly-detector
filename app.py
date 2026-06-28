@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 
 import numpy as np
 import pandas as pd
@@ -27,10 +28,18 @@ BAND_COLORS = {"CRITICAL": "#EF4444", "HIGH": "#F59E0B", "MEDIUM": "#FACC15", "L
 # --------------------------------------------------------------------------- #
 # Cached pipeline                                                             #
 # --------------------------------------------------------------------------- #
+def _read_upload(file_bytes, file_name):
+    """Parse an uploaded CSV or Excel file into a DataFrame."""
+    name = (file_name or "").lower()
+    if name.endswith((".xlsx", ".xls")):
+        return pd.read_excel(io.BytesIO(file_bytes))
+    return pd.read_csv(io.BytesIO(file_bytes))
+
+
 @st.cache_data(show_spinner="Running detection pipeline…")
-def run(source, n_accounts, n_days, fraud_rate, seed, w_rules, w_ml, w_graph, file_bytes):
-    if source == "Upload CSV" and file_bytes:
-        df = pd.read_csv(io.BytesIO(file_bytes))
+def run(source, n_accounts, n_days, fraud_rate, seed, w_rules, w_ml, w_graph, file_bytes, file_name):
+    if source.startswith("Upload") and file_bytes:
+        df = _read_upload(file_bytes, file_name)
         txns, truth = load_or_generate(df)
     else:
         txns, truth = generate_dataset(
@@ -48,8 +57,8 @@ def run(source, n_accounts, n_days, fraud_rate, seed, w_rules, w_ml, w_graph, fi
 st.sidebar.title("🛡️ FinSentry")
 st.sidebar.caption("Financial transaction anomaly & AML detection")
 
-source = st.sidebar.radio("Data source", ["Synthetic generator", "Upload CSV"], index=0)
-file_bytes = None
+source = st.sidebar.radio("Data source", ["Synthetic generator", "Upload CSV / Excel"], index=0)
+file_bytes, file_name = None, None
 n_accounts, n_days, fraud_rate, seed = 600, 45, 0.06, 7
 if source == "Synthetic generator":
     n_accounts = st.sidebar.slider("Accounts", 200, 1500, 600, 100)
@@ -58,19 +67,32 @@ if source == "Synthetic generator":
     seed = st.sidebar.number_input("Random seed", 0, 9999, 7)
 else:
     up = st.sidebar.file_uploader(
-        "Transactions CSV", type=["csv"],
-        help="Columns: txn_id, timestamp, src, dst, amount, channel, src_country, dst_country",
+        "Transactions file (CSV or Excel)", type=["csv", "xlsx", "xls"],
+        help="Required columns: timestamp, src, dst, amount. "
+             "Optional: txn_id, channel, src_country, dst_country.",
     )
     if up is not None:
-        file_bytes = up.getvalue()
-    st.sidebar.caption("No file? Switch back to the synthetic generator.")
+        file_bytes, file_name = up.getvalue(), up.name
+    sample_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "sample_transactions.csv")
+    if os.path.exists(sample_path):
+        with open(sample_path, "rb") as fh:
+            st.sidebar.download_button("⬇ Download a sample template", fh.read(),
+                                       file_name="sample_transactions.csv", mime="text/csv")
+    st.sidebar.caption("Upload a CSV or Excel ledger, or switch back to the synthetic generator.")
 
 st.sidebar.markdown("**Detection weights**")
 w_rules = st.sidebar.slider("AML rules", 0.0, 1.0, 0.5, 0.05)
 w_ml = st.sidebar.slider("ML ensemble", 0.0, 1.0, 0.3, 0.05)
 w_graph = st.sidebar.slider("Network graph", 0.0, 1.0, 0.2, 0.05)
 
-txns, truth, res = run(source, n_accounts, n_days, fraud_rate, seed, w_rules, w_ml, w_graph, file_bytes)
+if source.startswith("Upload") and not file_bytes:
+    st.info("⬆️ Upload a CSV or Excel transaction file in the sidebar to begin — or switch to the synthetic generator.")
+    st.stop()
+try:
+    txns, truth, res = run(source, n_accounts, n_days, fraud_rate, seed, w_rules, w_ml, w_graph, file_bytes, file_name)
+except Exception as e:
+    st.error(f"Could not process the uploaded file: {e}")
+    st.stop()
 results = res.results
 alerts = res.alerts
 

@@ -165,12 +165,42 @@ def generate_dataset(
     return txns, truth
 
 
+REQUIRED_COLUMNS = ("timestamp", "src", "dst", "amount")
+OPTIONAL_DEFAULTS = {"channel": "WIRE", "src_country": "NA", "dst_country": "NA", "typology": "unknown"}
+
+
+def normalize_ledger(df: pd.DataFrame) -> pd.DataFrame:
+    """Validate and coerce an uploaded ledger into the schema the pipeline expects.
+
+    Required columns: timestamp, src, dst, amount. Missing optional columns
+    (txn_id, channel, src_country, dst_country) are filled with sensible defaults
+    so real-world CSV/Excel files import cleanly.
+    """
+    df = df.copy()
+    df.columns = [str(c).strip().lower() for c in df.columns]
+    missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(
+            "Uploaded file is missing required column(s): " + ", ".join(missing)
+            + ". Required: timestamp, src, dst, amount."
+        )
+    if "txn_id" not in df.columns:
+        df["txn_id"] = [f"T{i:07d}" for i in range(1, len(df) + 1)]
+    for col, default in OPTIONAL_DEFAULTS.items():
+        if col not in df.columns:
+            df[col] = default
+    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+    df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
+    df = df.dropna(subset=["timestamp", "src", "dst", "amount"]).reset_index(drop=True)
+    if df.empty:
+        raise ValueError("No valid rows after parsing — check the timestamp and amount columns.")
+    df["src"] = df["src"].astype(str)
+    df["dst"] = df["dst"].astype(str)
+    return df
+
+
 def load_or_generate(uploaded: pd.DataFrame | None = None, **kwargs):
     """Return a usable transaction frame, either from an upload or freshly generated."""
     if uploaded is not None and len(uploaded):
-        df = uploaded.copy()
-        if "typology" not in df.columns:
-            df["typology"] = "unknown"
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-        return df, {}
+        return normalize_ledger(uploaded), {}
     return generate_dataset(**kwargs)
