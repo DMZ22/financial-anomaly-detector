@@ -7,3 +7,4 @@ venv/
 .streamlit/secrets.toml
 data/generated_*.csv
 *.log
+/.vercel

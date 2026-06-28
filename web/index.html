@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FinSentry — Financial Anomaly & AML Detection</title>
+<meta name="description" content="Transaction-monitoring style anomaly & AML detection: ML ensemble + AML typology rules + money-flow graph analysis." />
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  :root{
+    --bg:#0E1117; --panel:#161B26; --panel2:#1F2633; --line:#27303F;
+    --text:#E6E6E6; --muted:#94A3B8; --accent:#2DD4BF;
+    --crit:#EF4444; --high:#F59E0B; --med:#FACC15; --low:#3B82F6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:Inter,"Segoe UI",system-ui,Arial,sans-serif;line-height:1.45}
+  a{color:var(--accent);text-decoration:none}
+  header{padding:22px 26px 10px;border-bottom:1px solid var(--line)}
+  h1{margin:0;font-size:24px;letter-spacing:-.3px}
+  .sub{color:var(--muted);font-size:13.5px;margin-top:4px}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 26px 60px}
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin:18px 0 6px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .kpi .v{font-size:21px;font-weight:700}
+  .kpi .l{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+  .kpi.good .v{color:var(--accent)}
+  nav{display:flex;gap:6px;flex-wrap:wrap;margin:20px 0 14px}
+  nav button{background:var(--panel);color:var(--muted);border:1px solid var(--line);
+    border-radius:8px;padding:8px 14px;font-size:13.5px;cursor:pointer;font-weight:600}
+  nav button.active{background:var(--panel2);color:var(--text);border-color:var(--accent)}
+  .tab{display:none}.tab.active{display:block}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:16px}
+  .card h3{margin:0 0 8px;font-size:14px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:7px 9px;text-align:left;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;cursor:pointer;user-select:none}
+  tbody tr{cursor:pointer}tbody tr:hover{background:var(--panel2)}
+  .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700}
+  .b-CRITICAL{background:rgba(239,68,68,.18);color:#FCA5A5}
+  .b-HIGH{background:rgba(245,158,11,.18);color:#FCD34D}
+  .b-MEDIUM{background:rgba(250,204,21,.16);color:#FDE68A}
+  .b-LOW{background:rgba(59,130,246,.18);color:#93C5FD}
+  .filters button{margin-right:6px;background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    border-radius:7px;padding:5px 11px;font-size:12.5px;cursor:pointer}
+  .filters button.off{opacity:.4}
+  .reason{background:var(--panel2);border-left:3px solid var(--accent);border-radius:6px;
+    padding:7px 10px;margin:6px 0;font-size:13px}
+  .feat{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:13px}
+  .feat div{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:3px 0}
+  .feat span{color:var(--muted)}
+  .muted{color:var(--muted)}
+  .btn{display:inline-block;background:var(--accent);color:#04201c;font-weight:700;border:none;
+    border-radius:8px;padding:8px 13px;font-size:13px;cursor:pointer;margin-top:8px}
+  .note{font-size:12px;color:var(--muted);margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+  @media(max-width:880px){.kpis{grid-template-columns:repeat(3,1fr)}.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>🛡️ FinSentry — Financial Transaction Anomaly &amp; AML Detection</h1>
+  <div class="sub">Unsupervised ML ensemble · AML typology rule engine · money-flow graph analysis → explainable risk score per account.
+    &nbsp;<a href="https://github.com/DMZ22/financial-anomaly-detector" target="_blank">Source &amp; live Streamlit app ↗</a></div>
+</header>
+<div class="wrap">
+  <div class="kpis" id="kpis"></div>
+
+  <nav id="nav">
+    <button data-tab="overview" class="active">📊 Overview</button>
+    <button data-tab="queue">🚨 Alert queue</button>
+    <button data-tab="case">🔍 Case detail</button>
+    <button data-tab="network">🕸️ Network</button>
+    <button data-tab="eval">✅ Evaluation</button>
+    <button data-tab="about">ℹ️ About</button>
+  </nav>
+
+  <section id="overview" class="tab active">
+    <div class="grid2">
+      <div class="card"><h3>Risk-score distribution</h3><div id="c-hist"></div></div>
+      <div class="card"><h3>Accounts by risk band</h3><div id="c-band"></div></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>AML typologies triggered (alert queue)</h3><div id="c-typ"></div></div>
+      <div class="card"><h3>Daily value — flagged vs normal</h3><div id="c-daily"></div></div>
+    </div>
+  </section>
+
+  <section id="queue" class="tab">
+    <div class="card">
+      <h3>Alert queue — accounts at MEDIUM risk or above</h3>
+      <div class="filters" id="qfilters">
+        <button data-b="CRITICAL">CRITICAL</button>
+        <button data-b="HIGH">HIGH</button>
+        <button data-b="MEDIUM">MEDIUM</button>
+        <span class="muted" style="font-size:12px">— click a row to investigate</span>
+      </div>
+      <div style="overflow:auto;max-height:560px"><table id="qtable">
+        <thead><tr>
+          <th data-k="id">Account</th><th data-k="score">Risk</th><th data-k="band">Band</th>
+          <th data-k="codes">Rules</th><th data-k="throughput">Throughput</th><th data-k="reasons">Top reason</th>
+        </tr></thead><tbody></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section id="case" class="tab">
+    <div class="card"><span class="muted">Select an account from the Alert queue, or </span>
+      <select id="casesel"></select></div>
+    <div class="grid2">
+      <div class="card"><h3 id="case-title">Case</h3><div id="c-gauge"></div><div id="c-comp"></div></div>
+      <div class="card"><h3>Reason codes</h3><div id="case-reasons"></div>
+        <h3 style="margin-top:12px">Key features</h3><div class="feat" id="case-feats"></div>
+        <button class="btn" id="exportbtn">⬇ Export case report (JSON)</button></div>
+    </div>
+    <div class="card"><h3>Transaction timeline</h3><div id="c-timeline"></div></div>
+  </section>
+
+  <section id="network" class="tab">
+    <div class="card"><h3>Money-flow network — top-risk accounts &amp; counterparties</h3>
+      <div class="muted" style="font-size:12.5px;margin-bottom:6px">Red = critical/high alerts · node size ∝ risk · thicker edges carry more value.</div>
+      <div id="c-net"></div></div>
+    <div class="card"><h3>Circular money flows detected</h3><div id="cycles"></div></div>
+  </section>
+
+  <section id="eval" class="tab">
+    <div class="grid2">
+      <div class="card"><h3>ROC curve</h3><div id="c-roc"></div></div>
+      <div class="card"><h3>Confusion matrix (MEDIUM+ alert band)</h3><div id="c-cm"></div></div>
+    </div>
+    <div class="card"><h3>Ensemble model score distributions</h3><div id="c-ml"></div>
+      <div class="muted" style="font-size:12.5px">iso = Isolation Forest · lof = Local Outlier Factor · maha = robust Mahalanobis distance. The ensemble averages all three.</div></div>
+  </section>
+
+  <section id="about" class="tab">
+    <div class="card">
+      <h3>What this is</h3>
+      <p>FinSentry scores every account in a transaction ledger for money-laundering risk by combining three independent signals — exactly the pattern real transaction-monitoring platforms use:</p>
+      <ul>
+        <li><b>AML typology rule engine</b> — structuring, smurfing, rapid movement / layering, circular flows (round-tripping), high velocity, cash-intensive, cross-border to high-risk jurisdictions, round amounts, odd-hour activity. Each fires a weighted, human-readable reason code.</li>
+        <li><b>Unsupervised ML ensemble</b> — Isolation Forest + Local Outlier Factor + robust Mahalanobis distance over standardized behavioural features.</li>
+        <li><b>Money-flow graph analysis</b> — circular flows, fan-in/out hubs and betweenness over material (high-value) flows.</li>
+      </ul>
+      <p>The three are blended into a 0–100 risk score, banded LOW / MEDIUM / HIGH / CRITICAL, and ranked into an alert queue with reason codes. All data here is <b>synthetic</b> — generated with reproducible seeds, no real customer information.</p>
+      <p class="muted">This page is a static snapshot of a real pipeline run. The fully interactive tool (adjust data size, weights, upload your own ledger) is the Streamlit app in the <a href="https://github.com/DMZ22/financial-anomaly-detector" target="_blank">GitHub repo</a>.</p>
+    </div>
+  </section>
+
+  <div class="note">FinSentry · Python · scikit-learn · NetworkX · SciPy · Plotly — front-end powered by a real pipeline run (<span id="genmeta"></span>).</div>
+</div>
+
+<script>
+const BAND = {CRITICAL:'#EF4444',HIGH:'#F59E0B',MEDIUM:'#FACC15',LOW:'#3B82F6'};
+const PL = {paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',font:{color:'#CBD5E1',size:12},
+  margin:{t:10,r:10,b:36,l:44},xaxis:{gridcolor:'#27303F',zerolinecolor:'#27303F'},yaxis:{gridcolor:'#27303F',zerolinecolor:'#27303F'}};
+const CFG = {displayModeBar:false,responsive:true};
+let D=null, curBand={CRITICAL:1,HIGH:1,MEDIUM:1}, sortK='score', sortDir=-1;
+
+const fmt = n => '$'+Number(n).toLocaleString();
+const $ = s => document.querySelector(s);
+
+fetch('data.json').then(r=>r.json()).then(d=>{D=d; init();}).catch(e=>{
+  document.querySelector('.wrap').innerHTML='<p style="color:#FCA5A5">Failed to load data.json — '+e+'</p>';});
+
+function init(){
+  const m=D.meta;
+  $('#kpis').innerHTML = [
+    ['Transactions', m.n_txns.toLocaleString()],
+    ['Accounts', m.n_accounts.toLocaleString()],
+    ['Alerts (MED+)', m.n_alerts],
+    ['High-risk', m.n_high],
+    ['Flagged', '$'+(m.flagged_value/1e6).toFixed(1)+'M'],
+    ['ROC-AUC', m.metrics.roc_auc, true],
+  ].map(([l,v,g])=>`<div class="kpi ${g?'good':''}"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+  $('#genmeta').textContent = m.n_alerts+' alerts · precision '+(m.metrics.precision*100).toFixed(0)+'% · recall '+(m.metrics.recall*100).toFixed(0)+'%';
+
+  document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active'); $('#'+b.dataset.tab).classList.add('active');
+    window.dispatchEvent(new Event('resize'));
+  });
+
+  drawOverview(); buildQueue(); buildCase(); drawNetwork(); drawEval();
+}
+
+function drawOverview(){
+  Plotly.newPlot('c-hist',[{type:'bar',x:D.hist.x,y:D.hist.y,marker:{color:'#2DD4BF'}}],
+    {...PL,height:260,bargap:0.02,shapes:[40,60,80].map((v,i)=>({type:'line',x0:v,x1:v,y0:0,y1:Math.max(...D.hist.y),
+      line:{color:[ '#FACC15','#F59E0B','#EF4444'][i],dash:'dash',width:1}}))},CFG);
+
+  const bands=['CRITICAL','HIGH','MEDIUM','LOW'];
+  Plotly.newPlot('c-band',[{type:'bar',x:bands,y:bands.map(b=>D.bands[b]||0),
+    marker:{color:bands.map(b=>BAND[b])}}],{...PL,height:260},CFG);
+
+  const t=Object.entries(D.typologies).sort((a,b)=>b[1]-a[1]);
+  Plotly.newPlot('c-typ',[{type:'bar',x:t.map(x=>x[0]),y:t.map(x=>x[1]),marker:{color:'#60A5FA'}}],
+    {...PL,height:280,margin:{...PL.margin,b:90},xaxis:{...PL.xaxis,tickangle:-35}},CFG);
+
+  Plotly.newPlot('c-daily',[
+    {type:'scatter',mode:'lines',stackgroup:'o',name:'normal',x:D.daily.day,y:D.daily.normal,line:{color:'#475569'}},
+    {type:'scatter',mode:'lines',stackgroup:'o',name:'flagged',x:D.daily.day,y:D.daily.flagged,line:{color:'#EF4444'}},
+  ],{...PL,height:280,legend:{orientation:'h',y:1.12}},CFG);
+}
+
+function buildQueue(){
+  document.querySelectorAll('#qfilters button').forEach(b=>{b.onclick=()=>{
+    curBand[b.dataset.b]=!curBand[b.dataset.b]; b.classList.toggle('off',!curBand[b.dataset.b]); renderQueue();};});
+  document.querySelectorAll('#qtable th').forEach(th=>th.onclick=()=>{
+    const k=th.dataset.k; if(k==='codes'||k==='reasons')return;
+    if(sortK===k)sortDir*=-1; else{sortK=k;sortDir=(k==='id'||k==='band')?1:-1;} renderQueue();});
+  renderQueue();
+}
+function renderQueue(){
+  let rows=D.alerts.filter(a=>curBand[a.band]);
+  rows.sort((a,b)=>{let x=a[sortK],y=b[sortK]; if(typeof x==='string')return x<y?-sortDir:x>y?sortDir:0; return (x-y)*sortDir;});
+  $('#qtable tbody').innerHTML = rows.map(a=>`<tr onclick="openCase('${a.id}')">
+    <td><b>${a.id}</b></td><td>${a.score.toFixed(1)}</td>
+    <td><span class="pill b-${a.band}">${a.band}</span></td>
+    <td>${a.codes.length}</td><td>${fmt(a.throughput)}</td>
+    <td class="muted" style="max-width:380px">${(a.reasons[0]||'').slice(0,90)}</td></tr>`).join('');
+}
+
+function buildCase(){
+  $('#casesel').innerHTML = D.alerts.map(a=>`<option value="${a.id}">${a.id} — ${a.score.toFixed(1)} (${a.band})</option>`).join('');
+  $('#casesel').onchange = e=>openCase(e.target.value,false);
+  $('#exportbtn').onclick = exportCase;
+  openCase(D.alerts[0].id,false);
+}
+let curCase=null;
+function openCase(id,nav=true){
+  const a=D.alerts.find(x=>x.id===id); if(!a)return; curCase=a;
+  if(nav){document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelector('[data-tab=case]').classList.add('active'); $('#case').classList.add('active');}
+  $('#casesel').value=id;
+  $('#case-title').textContent = `${a.id} — ${a.band} (risk ${a.score.toFixed(1)})`;
+  Plotly.newPlot('c-gauge',[{type:'indicator',mode:'gauge+number',value:a.score,
+    gauge:{axis:{range:[0,100]},bar:{color:BAND[a.band]},
+      steps:[{range:[0,40],color:'#1f2937'},{range:[40,60],color:'#3f3f1f'},{range:[60,80],color:'#4a2f17'},{range:[80,100],color:'#4a1717'}]}}],
+    {...PL,height:200,margin:{t:20,b:0,l:20,r:20}},CFG);
+  Plotly.newPlot('c-comp',[{type:'bar',x:['AML rules','ML ensemble','Network'],y:[a.rule,a.ml,a.graph],
+    marker:{color:['#2DD4BF','#60A5FA','#A78BFA']}}],{...PL,height:180,yaxis:{...PL.yaxis,range:[0,1]}},CFG);
+  $('#case-reasons').innerHTML = a.reasons.length? a.reasons.map(r=>`<div class="reason">${r}</div>`).join('')
+    : '<span class="muted">Flagged primarily by the ML ensemble.</span>';
+  $('#case-feats').innerHTML = [
+    ['Transactions',a.txns],['Throughput',fmt(a.throughput)],['Net flow',fmt(a.net_flow)],
+    ['Cash ratio',a.cash_ratio],['Pass-through',a.pass_through],['Distinct senders',a.distinct_in],
+    ['Cross-border',a.cross_border],['Rules fired',a.codes.join(', ')||'—'],
+  ].map(([k,v])=>`<div><span>${k}</span><b>${v}</b></div>`).join('');
+  drawTimeline(id);
+}
+function drawTimeline(id){
+  const tx=D.txns_by_acct[id]||[];
+  const ins=tx.filter(t=>t.dir==='in'), outs=tx.filter(t=>t.dir==='out');
+  const mk=arr=>({x:arr.map(t=>t.t),y:arr.map(t=>t.amt),mode:'markers',type:'scatter',
+    text:arr.map(t=>`${t.src}→${t.dst} ${t.ch} ${t.sc}→${t.dc}`),hovertemplate:'%{text}<br>$%{y:,.0f}<extra></extra>'});
+  Plotly.newPlot('c-timeline',[
+    {...mk(ins),name:'incoming',marker:{color:'#34D399',size:8}},
+    {...mk(outs),name:'outgoing',marker:{color:'#F59E0B',size:8}},
+  ],{...PL,height:300,legend:{orientation:'h',y:1.12},
+     shapes:[{type:'line',xref:'paper',x0:0,x1:1,y0:10000,y1:10000,line:{color:'#EF4444',dash:'dot',width:1}}]},CFG);
+}
+function exportCase(){
+  if(!curCase)return; const a=curCase;
+  const blob=new Blob([JSON.stringify({account:a.id,risk_score:a.score,risk_band:a.band,
+    reason_codes:a.reasons,rules_fired:a.codes,throughput:a.throughput,net_flow:a.net_flow,transactions:a.txns},null,2)],{type:'application/json'});
+  const u=URL.createObjectURL(blob),x=document.createElement('a');x.href=u;x.download='case_'+a.id+'.json';x.click();URL.revokeObjectURL(u);
+}
+
+function drawNetwork(){
+  const e=D.network.edges, n=D.network.nodes;
+  const ex=[],ey=[]; e.forEach(g=>{ex.push(g.x0,g.x1,null);ey.push(g.y0,g.y1,null);});
+  const edge={x:ex,y:ey,mode:'lines',type:'scatter',line:{color:'#3A4658',width:0.7},hoverinfo:'none'};
+  const node={x:n.map(p=>p.x),y:n.map(p=>p.y),mode:'markers',type:'scatter',
+    text:n.map(p=>`${p.id}<br>risk ${p.score} (${p.band})`),hoverinfo:'text',
+    marker:{color:n.map(p=>BAND[p.band]),size:n.map(p=>9+p.score/6),line:{width:0.5,color:'#0E1117'}}};
+  Plotly.newPlot('c-net',[edge,node],{...PL,height:520,
+    xaxis:{visible:false},yaxis:{visible:false},showlegend:false},CFG);
+  $('#cycles').innerHTML = D.cycles.length
+    ? '<table><tbody>'+D.cycles.map(c=>`<tr><td class="muted">${c.concat([c[0]]).join(' → ')}</td></tr>`).join('')+'</tbody></table>'
+    : '<span class="muted">None at current settings.</span>';
+}
+
+function drawEval(){
+  Plotly.newPlot('c-roc',[
+    {x:D.roc.fpr,y:D.roc.tpr,mode:'lines',line:{color:'#2DD4BF',width:3},name:'ROC'},
+    {x:[0,1],y:[0,1],mode:'lines',line:{color:'#64748B',dash:'dash'},name:'chance'},
+  ],{...PL,height:320,title:{text:'AUC = '+D.meta.metrics.roc_auc,font:{size:13}},
+     xaxis:{...PL.xaxis,title:'false positive rate'},yaxis:{...PL.yaxis,title:'true positive rate'}},CFG);
+
+  const cm=D.cm;
+  Plotly.newPlot('c-cm',[{type:'heatmap',z:[cm[1],cm[0]],
+    x:['pred: clear','pred: alert'],y:['truth: clean','truth: suspicious'],
+    colorscale:'Blues',showscale:false,
+    text:[cm[1],cm[0]],texttemplate:'%{text}',textfont:{size:18}}],
+    {...PL,height:320},CFG);
+
+  Plotly.newPlot('c-ml',['iso','lof','maha'].map((k,i)=>({type:'violin',y:D.ml_dist[k],name:k,
+    box:{visible:true},meanline:{visible:true},line:{color:['#2DD4BF','#60A5FA','#A78BFA'][i]}})),
+    {...PL,height:320},CFG);
+}
+</script>
+</body>
+</html>

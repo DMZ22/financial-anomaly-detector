@@ -6,7 +6,7 @@ risk by combining an **unsupervised machine-learning ensemble**, an **AML typolo
 rule engine**, and **money-flow network analysis**, then ranks the results into an
 explainable **alert queue** with case-level drill-down.
 
-**▶️ Live demo:** _deploy on Streamlit Community Cloud (see below)_
+**▶️ Live demo:** **https://finsentry-aml.vercel.app** — interactive dashboard (a static snapshot of a real pipeline run)
 **Stack:** Python · scikit-learn · NetworkX · SciPy · pandas · Plotly · Streamlit
 
 ---
@@ -100,6 +100,8 @@ finsentry/
   graph.py      money-flow network: cycles, hubs, betweenness
   scoring.py    composite risk score + banding + reason codes
   pipeline.py   orchestration + evaluation metrics
-app.py          Streamlit dashboard
+app.py          Streamlit dashboard (full interactive tool)
 evaluate.py     CLI performance report
+build_web.py    exports web/data.json from a real pipeline run
+web/            static interactive dashboard (deployed on Vercel)
 ```
